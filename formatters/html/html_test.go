@@ -1,6 +1,7 @@
 package html
 
 import (
+	"bytes"
 	"errors"
 	"io/ioutil"
 	"strings"
@@ -74,4 +75,44 @@ func TestFormatterStyleToCSS(t *testing.T) {
 			t.Errorf("rule starts with semicolon - expected valid css rule without semicolon: %v", s)
 		}
 	}
+}
+
+func TestClassPrefix(t *testing.T) {
+	wantPrefix := "some-prefix-"
+	withPrefix := New(WithClasses(), ClassPrefix(wantPrefix))
+	noPrefix := New(WithClasses())
+	for st := range chroma.StandardTypes {
+		if noPrefix.class(st) == "" {
+			if got := withPrefix.class(st); got != "" {
+				t.Errorf("Formatter.class(%v): prefix shouldn't be added to empty classes", st)
+			}
+		} else if got := withPrefix.class(st); !strings.HasPrefix(got, wantPrefix) {
+			t.Errorf("Formatter.class(%v): %q should have a class prefix", st, got)
+		}
+	}
+
+	var styleBuf bytes.Buffer
+	withPrefix.WriteCSS(&styleBuf, styles.Fallback)
+	if !strings.Contains(styleBuf.String(), ".some-prefix-chroma ") {
+		t.Error("Stylesheets should have a class prefix")
+	}
+}
+
+func TestTableLineNumberNewlines(t *testing.T) {
+	f := New(WithClasses(), WithLineNumbers(), LineNumbersInTable())
+	it, err := lexers.Get("go").Tokenise(nil, "package main\nfunc main()\n{\nprintln(`hello world`)\n}\n")
+	assert.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = f.Format(&buf, styles.Fallback, it)
+	assert.NoError(t, err)
+
+	// Don't bother testing the whole output, just verify it's got line numbers
+	// in a <pre>-friendly format.
+	// Note: placing the newlines inside the <span> lets browser selections look
+	// better, instead of "skipping" over the span margin.
+	assert.Contains(t, buf.String(), `<span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span>`)
 }
